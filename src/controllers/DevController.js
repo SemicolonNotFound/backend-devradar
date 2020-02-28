@@ -1,44 +1,54 @@
-const axios = require('axios');
-const Dev = require('../models/Dev');
-const parseStringAsArray = require('../utils/parseStringAsArray');
+const axios = require("axios");
+const Dev = require("../models/Dev");
+const parseStringAsArray = require("../utils/parseStringAsArray");
+const { findConnections, sendMessage } = require("../websocket");
 
 module.exports = {
-    // listar.
-    async index(request, response) {
-        const devs = await Dev.find();
+  // listar.
+  async index(request, response) {
+    const devs = await Dev.find();
 
-        return response.json(devs);
-    },
+    return response.json(devs);
+  },
 
-    //
-    async store(request, response) {
-        const { github_username, techs, latitude, longitude } = request.body;
+  //
+  async store(request, response) {
+    const { github_username, techs, latitude, longitude } = request.body;
 
-        let dev = await Dev.findOne({ github_username });
-        if (!dev) {
-            const apiResponse = await axios.get(`https://api.github.com/users/${github_username}`);
+    let dev = await Dev.findOne({ github_username });
+    if (!dev) {
+      const apiResponse = await axios.get(
+        `https://api.github.com/users/${github_username}`
+      );
 
-            // Se o name não existir, pega o valor de login
-            const { name = login, avatar_url, bio } = apiResponse.data;
+      // Se o name não existir, pega o valor de login
+      const { name = login, avatar_url, bio } = apiResponse.data;
 
-            const techsArray = parseStringAsArray(techs);
+      const techsArray = parseStringAsArray(techs);
 
-            const location = {
-                type: 'Point',
-                coordinates: [longitude, latitude],
-            };
+      const location = {
+        type: "Point",
+        coordinates: [longitude, latitude],
+      };
 
-            dev = await Dev.create({
-                github_username,
-                name,
-                avatar_url,
-                bio,
-                techs: techsArray,
-                location
-            })
+      dev = await Dev.create({
+        github_username,
+        name,
+        avatar_url,
+        bio,
+        techs: techsArray,
+        location
+      })
 
-        }
+      // Filtrar conexões que estão há no máximo 10KM e que obdecem os filtros de tecnologias.
+      const sendSocketMessageTo = findConnections(
+        { latitude, longitude },
+        techsArray,
+      )
 
-        return response.json(dev);
+      sendMessage(sendSocketMessageTo, "new-dev", dev);
     }
+
+    return response.json(dev);
+  }
 };
